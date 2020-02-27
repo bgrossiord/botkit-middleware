@@ -14,16 +14,12 @@
  * limitations under the License.
  */
 import Botkit = require('botkit');
-import AssistantV1 = require('ibm-watson/assistant/v1');
-import { MessageParams, MessageResponse } from 'ibm-watson/assistant/v1';
-import { Context } from 'ibm-watson/assistant/v1';
+import AssistantV2 = require('ibm-watson/assistant/v2');
+import { MessageParams, MessageResponse } from 'ibm-watson/assistant/v2';
+import { MessageContext } from 'ibm-watson/assistant/v2';
 import { BotkitMessage } from 'botkit';
-export interface WatsonMiddlewareConfig extends AssistantV1.Options {
-    workspace_id: string;
-    minimum_confidence?: number;
-}
 /**
- * @deprecated please use AssistantV1.MessageParams instead
+ * @deprecated please use AssistantV2.MessageParams instead
  */
 export declare type Payload = MessageParams;
 export declare type BotkitWatsonMessage = BotkitMessage & {
@@ -33,22 +29,25 @@ export declare type BotkitWatsonMessage = BotkitMessage & {
 export interface ContextDelta {
     [index: string]: any;
 }
-export declare class WatsonMiddleware {
-    private readonly config;
+export declare class WatsonMiddlewareV2 {
     private conversation;
     private storage;
+    private assistantId;
+    private sessionId;
+    private inactivityTimeOut;
     private readonly minimumConfidence;
+    private expiringSession;
     private readonly ignoreType;
-    constructor(config: WatsonMiddlewareConfig);
+    constructor(version: string, apikey: string, url: string, assistantId: string, inactivityTimeOut?: number, minimumConfidence?: number);
     hear(patterns: string[], message: Botkit.BotkitMessage): boolean;
+    createSession(conversation: AssistantV2, assistantId: string): number;
     before(message: Botkit.BotkitMessage, payload: MessageParams): Promise<MessageParams>;
     after(message: Botkit.BotkitMessage, response: MessageResponse): Promise<MessageResponse>;
     sendToWatson(bot: Botkit.BotWorker, message: Botkit.BotkitMessage, contextDelta: ContextDelta): Promise<void>;
+    checkExiringSession(): void;
     receive(bot: Botkit.BotWorker, message: Botkit.BotkitMessage): Promise<void>;
     interpret(bot: Botkit.BotWorker, message: Botkit.BotkitMessage): Promise<void>;
-    readContext(user: string): Promise<Context>;
-    updateContext(user: string, context: Context): Promise<{
-        context: Context;
-    }>;
-    deleteUserData(customerId: string): Promise<void>;
+    readContext(user: string): Promise<MessageContext>;
+    updateContext(user: string, response: MessageResponse): Promise<MessageResponse>;
+    deleteUserData(sessionId: string): Promise<void>;
 }

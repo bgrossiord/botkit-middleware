@@ -14,12 +14,8 @@
  * limitations under the License.
  */
 import { Storage } from 'botbuilder';
-import AssistantV1 = require('ibm-watson/assistant/v1');
-import { Context, MessageParams, MessageResponse } from 'ibm-watson/assistant/v1';
-export declare function readContext(userId: string, storage: Storage): Promise<Context | null>;
-export declare function updateContext(userId: string, storage: Storage, watsonResponse: {
-    context: Context;
-}): Promise<{
-    context: Context;
-}>;
-export declare function postMessage(conversation: AssistantV1, payload: MessageParams): Promise<MessageResponse>;
+import AssistantV2 = require('ibm-watson/assistant/v2');
+import { MessageContext, MessageParams, MessageResponse } from 'ibm-watson/assistant/v2';
+export declare function readContext(userId: string, storage: Storage): Promise<MessageContext | null>;
+export declare function updateContext(userId: string, storage: Storage, response: MessageResponse): Promise<MessageResponse>;
+export declare function postMessage(conversation: AssistantV2, payload: MessageParams): Promise<MessageResponse>;

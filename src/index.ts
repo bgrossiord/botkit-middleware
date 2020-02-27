@@ -17,21 +17,17 @@
 
 const debug = require('debug')('watson-middleware:index');
 import Botkit = require('botkit');
-import AssistantV1 = require('ibm-watson/assistant/v1');
-import { MessageParams, MessageResponse } from 'ibm-watson/assistant/v1';
-import { Context } from 'ibm-watson/assistant/v1';
+import AssistantV2 = require('ibm-watson/assistant/v2');
+import { MessageParams, MessageResponse } from 'ibm-watson/assistant/v2';
+import { MessageContext } from 'ibm-watson/assistant/v2';
 import { Storage } from 'botbuilder';
 import { readContext, updateContext, postMessage } from './utils';
 import deepMerge = require('deepmerge');
 import { BotkitMessage } from 'botkit';
-
-export interface WatsonMiddlewareConfig extends AssistantV1.Options {
-  workspace_id: string;
-  minimum_confidence?: number;
-}
+import { IamAuthenticator } from 'ibm-watson/auth';
 
 /**
- * @deprecated please use AssistantV1.MessageParams instead
+ * @deprecated please use AssistantV2.MessageParams instead
  */
 export type Payload = MessageParams;
 
@@ -44,25 +40,43 @@ export interface ContextDelta {
   [index: string]: any;
 }
 
-export class WatsonMiddleware {
-  private readonly config: WatsonMiddlewareConfig;
-  private conversation: AssistantV1;
+export class WatsonMiddlewareV2 {
+  private conversation: AssistantV2;
   private storage: Storage;
-  private readonly minimumConfidence: number = 0.75;
+  private assistantId: string;
+  private sessionId: string;
+  private inactivityTimeOut: number = 5;
+  private readonly minimumConfidence: number = 0.5;
+  private expiringSession: number;
   // These are initiated by Slack itself and not from the end-user. Won't send these to WCS.
   private readonly ignoreType = ['presence_change', 'reconnect_url'];
 
-  public constructor(config: WatsonMiddlewareConfig) {
-    this.config = config;
-    if (config.minimum_confidence) {
-      this.minimumConfidence = config.minimum_confidence;
+  public constructor(
+    version: string,
+    apikey: string,
+    url: string,
+    assistantId: string,
+    inactivityTimeOut?: number,
+    minimumConfidence?: number,
+  ) {
+    if (minimumConfidence) {
+      this.minimumConfidence = minimumConfidence;
     }
-
+    if (inactivityTimeOut) {
+      this.inactivityTimeOut = inactivityTimeOut;
+    }
     debug(
       'Creating Assistant object with parameters: ' +
-        JSON.stringify(this.config, null, 2),
+        JSON.stringify(arguments, null, 2),
     );
-    this.conversation = new AssistantV1(this.config);
+    this.conversation = new AssistantV2({
+      version: version,
+      authenticator: new IamAuthenticator({
+        apikey: apikey,
+      }),
+      url: url,
+    });
+    this.expiringSession = this.createSession(this.conversation, assistantId);
   }
 
   public hear(patterns: string[], message: Botkit.BotkitMessage): boolean {
@@ -79,6 +93,22 @@ export class WatsonMiddleware {
       }
     }
     return false;
+  }
+
+  public createSession(conversation: AssistantV2, assistantId: string) {
+    this.assistantId = assistantId;
+    this.conversation
+      .createSession({
+        assistantId: assistantId,
+      })
+      .then(res => {
+        this.sessionId = res.result.session_id;
+        console.debug('Assistant sessionId :' + this.sessionId);
+      })
+      .catch(err => {
+        console.log(err);
+      });
+    return Date.now() + this.inactivityTimeOut * 60 * 1000;
   }
 
   public before(
@@ -122,7 +152,8 @@ export class WatsonMiddleware {
 
       const payload: MessageParams = {
         // eslint-disable-next-line @typescript-eslint/camelcase
-        workspace_id: this.config.workspace_id,
+        assistantId: this.assistantId,
+        sessionId: this.sessionId,
       };
       if (message.text) {
         // text can not contain the following characters: tab, new line, carriage return.
@@ -142,21 +173,28 @@ export class WatsonMiddleware {
           payload.context = deepMerge(payload.context, contextDelta);
         }
       }
-      if (
+      /*if (
         payload.context &&
-        payload.context.workspace_id &&
-        payload.context.workspace_id.length === 36
+        payload.context.assistantId &&
+        payload.context.assistantId.length === 36
       ) {
         // eslint-disable-next-line @typescript-eslint/camelcase
-        payload.workspace_id = payload.context.workspace_id;
-      }
+        payload.workspaceId = payload.context.workspaceId;
+      }*/
 
       const watsonRequest = await this.before(message, payload);
+      this.checkExiringSession();
+      if (this.expiringSession == null || this.expiringSession < Date.now()) {
+        this.expiringSession = this.createSession(
+          this.conversation,
+          this.assistantId,
+        );
+      }
       let watsonResponse = await postMessage(this.conversation, watsonRequest);
-      if (typeof watsonResponse.output.error === 'string') {
+      /*if (typeof watsonResponse.output.error === 'string') {
         debug('Error: %s', watsonResponse.output.error);
         message.watsonError = watsonResponse.output.error;
-      }
+      }*/
       watsonResponse = await this.after(message, watsonResponse);
 
       message.watsonData = watsonResponse;
@@ -166,6 +204,15 @@ export class WatsonMiddleware {
       debug(
         'Error: %s',
         JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+      );
+    }
+  }
+
+  public checkExiringSession() {
+    if (this.expiringSession == null || this.expiringSession < Date.now()) {
+      this.expiringSession = this.createSession(
+        this.conversation,
+        this.assistantId,
       );
     }
   }
@@ -184,7 +231,7 @@ export class WatsonMiddleware {
     return this.sendToWatson(bot, message, null);
   }
 
-  public async readContext(user: string): Promise<Context> {
+  public async readContext(user: string): Promise<MessageContext> {
     if (!this.storage) {
       throw new Error(
         'readContext is called before the first this.receive call',
@@ -195,25 +242,25 @@ export class WatsonMiddleware {
 
   public async updateContext(
     user: string,
-    context: Context,
-  ): Promise<{ context: Context }> {
+    response: MessageResponse,
+  ): Promise<MessageResponse> {
     if (!this.storage) {
       throw new Error(
         'updateContext is called before the first this.receive call',
       );
     }
-    return updateContext(user, this.storage, {
-      context: context,
-    });
+    return updateContext(user, this.storage, response);
   }
 
-  public async deleteUserData(customerId: string) {
+  public async deleteUserData(sessionId: string) {
     const params = {
-      customer_id: customerId,
+      sessionId: sessionId,
       return_response: true,
+      assistantId: this.assistantId,
     };
+    this.checkExiringSession();
     try {
-      const response = await this.conversation.deleteUserData(params);
+      const response = await this.conversation.deleteSession(params);
       debug('deleteUserData response', response);
     } catch (err) {
       throw new Error(
