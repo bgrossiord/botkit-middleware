@@ -17,19 +17,19 @@
 
 const debug = require('debug')('watson-middleware:utils');
 import { Storage } from 'botbuilder';
-import AssistantV1 = require('ibm-watson/assistant/v1');
+import AssistantV2 = require('ibm-watson/assistant/v2');
 import {
-  Context,
+  MessageContext,
   MessageParams,
   MessageResponse,
-} from 'ibm-watson/assistant/v1';
+} from 'ibm-watson/assistant/v2';
 
 const storagePrefix = 'user.';
 
 export async function readContext(
   userId: string,
   storage: Storage,
-): Promise<Context | null> {
+): Promise<MessageContext | null> {
   const itemId = storagePrefix + userId;
 
   try {
@@ -51,8 +51,8 @@ export async function readContext(
 export async function updateContext(
   userId: string,
   storage: Storage,
-  watsonResponse: { context: Context },
-): Promise<{ context: Context }> {
+  response: MessageResponse,
+): Promise<MessageResponse> {
   const itemId = storagePrefix + userId;
 
   let userData: any = {};
@@ -71,20 +71,20 @@ export async function updateContext(
   }
 
   userData.id = userId;
-  userData.context = watsonResponse.context;
+  userData.context = response.context;
   let changes = {};
   changes[itemId] = userData;
   await storage.write(changes);
 
-  return watsonResponse;
+  return response;
 }
 
 export async function postMessage(
-  conversation: AssistantV1,
+  conversation: AssistantV2,
   payload: MessageParams,
 ): Promise<MessageResponse> {
   debug('Assistant Request: %s', JSON.stringify(payload, null, 2));
   const response = await conversation.message(payload);
   debug('Assistant Response: %s', JSON.stringify(response, null, 2));
-  return response;
+  return response.result;
 }

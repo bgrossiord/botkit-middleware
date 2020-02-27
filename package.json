@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "node ./node_modules/typescript/bin/tsc --p ./tsconfig.json",
+    "build": "node ./node_modules/typescript/bin/tsc ",
     "pretest": "npm run build",
     "test": "jest test --coverage --forceExit",
     "lint": "npm run build && eslint '*/**/*.ts' --quiet --fix",
@@ -53,10 +53,10 @@
     "trailingComma": "all"
   },
   "dependencies": {
+    "botkit": "^4.6.2",
     "debug": "^4.1.1",
-    "botkit": "^4.0.1",
-    "deepmerge": "^4.0.0",
-    "ibm-watson": "^4.2.5"
+    "deepmerge": "^4.2.2",
+    "ibm-watson": "^5.3.1"
   },
   "lint-staged": {
     "src/**/*.ts": [
