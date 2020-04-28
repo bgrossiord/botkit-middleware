@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 import Botkit = require('botkit');
-import AssistantV2 = require('ibm-watson/assistant/v2');
 import { MessageParams, MessageResponse } from 'ibm-watson/assistant/v2';
 import { MessageContext } from 'ibm-watson/assistant/v2';
 import { BotkitMessage } from 'botkit';
@@ -40,11 +39,11 @@ export declare class WatsonMiddlewareV2 {
     private readonly ignoreType;
     constructor(version: string, apikey: string, url: string, assistantId: string, inactivityTimeOut?: number, minimumConfidence?: number);
     hear(patterns: string[], message: Botkit.BotkitMessage): boolean;
-    createSession(conversation: AssistantV2, assistantId: string): number;
+    createSession(): Promise<number>;
     before(message: Botkit.BotkitMessage, payload: MessageParams): Promise<MessageParams>;
     after(message: Botkit.BotkitMessage, response: MessageResponse): Promise<MessageResponse>;
     sendToWatson(bot: Botkit.BotWorker, message: Botkit.BotkitMessage, contextDelta: ContextDelta): Promise<void>;
-    checkExiringSession(): void;
+    checkExiringSession(): Promise<void>;
     receive(bot: Botkit.BotWorker, message: Botkit.BotkitMessage): Promise<void>;
     interpret(bot: Botkit.BotWorker, message: Botkit.BotkitMessage): Promise<void>;
     readContext(user: string): Promise<MessageContext>;
