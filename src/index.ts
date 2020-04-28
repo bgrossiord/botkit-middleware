@@ -250,7 +250,7 @@ export class WatsonMiddlewareV2 {
       return_response: true,
       assistantId: this.assistantId,
     };
-    this.checkExiringSession();
+    await this.checkExiringSession();
     try {
       const response = await this.conversation.deleteSession(params);
       debug('deleteUserData response', response);
