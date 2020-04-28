@@ -59,6 +59,7 @@ export class WatsonMiddlewareV2 {
     inactivityTimeOut?: number,
     minimumConfidence?: number,
   ) {
+    this.assistantId = assistantId;
     if (minimumConfidence) {
       this.minimumConfidence = minimumConfidence;
     }
@@ -67,7 +68,7 @@ export class WatsonMiddlewareV2 {
     }
     debug(
       'Creating Assistant object with parameters: ' +
-        JSON.stringify(arguments, null, 2),
+      JSON.stringify(arguments, null, 2),
     );
     this.conversation = new AssistantV2({
       version: version,
@@ -76,7 +77,6 @@ export class WatsonMiddlewareV2 {
       }),
       url: url,
     });
-    this.expiringSession = this.createSession(this.conversation, assistantId);
   }
 
   public hear(patterns: string[], message: Botkit.BotkitMessage): boolean {
@@ -95,20 +95,22 @@ export class WatsonMiddlewareV2 {
     return false;
   }
 
-  public createSession(conversation: AssistantV2, assistantId: string) {
-    this.assistantId = assistantId;
-    this.conversation
-      .createSession({
-        assistantId: assistantId,
-      })
-      .then(res => {
-        this.sessionId = res.result.session_id;
-        console.debug('Assistant sessionId :' + this.sessionId);
-      })
-      .catch(err => {
-        console.log(err);
+  public async createSession(): Promise<number> {
+    try {
+      var sessionResp = await this.conversation.createSession({
+        assistantId: this.assistantId
       });
-    return Date.now() + this.inactivityTimeOut * 60 * 1000;
+      this.sessionId = sessionResp.result.session_id;
+      console.debug("Assistant sessionId :" + this.sessionId);
+      return Date.now() + this.inactivityTimeOut * 60 * 1000;
+    } catch (err) {
+      throw new Error(
+        'Failed to renew session error code' +
+        err.code +
+        ', message: ' +
+        err.message,
+      );
+    }
   }
 
   public before(
@@ -149,7 +151,7 @@ export class WatsonMiddlewareV2 {
 
     try {
       const userContext = await readContext(message.user, this.storage);
-
+      await this.checkExiringSession();
       const payload: MessageParams = {
         // eslint-disable-next-line @typescript-eslint/camelcase
         assistantId: this.assistantId,
@@ -183,13 +185,6 @@ export class WatsonMiddlewareV2 {
       }*/
 
       const watsonRequest = await this.before(message, payload);
-      this.checkExiringSession();
-      if (this.expiringSession == null || this.expiringSession < Date.now()) {
-        this.expiringSession = this.createSession(
-          this.conversation,
-          this.assistantId,
-        );
-      }
       let watsonResponse = await postMessage(this.conversation, watsonRequest);
       /*if (typeof watsonResponse.output.error === 'string') {
         debug('Error: %s', watsonResponse.output.error);
@@ -208,12 +203,9 @@ export class WatsonMiddlewareV2 {
     }
   }
 
-  public checkExiringSession() {
+  public async checkExiringSession(): Promise<void> {
     if (this.expiringSession == null || this.expiringSession < Date.now()) {
-      this.expiringSession = this.createSession(
-        this.conversation,
-        this.assistantId,
-      );
+      this.expiringSession = await this.createSession();
     }
   }
 
@@ -265,9 +257,9 @@ export class WatsonMiddlewareV2 {
     } catch (err) {
       throw new Error(
         'Failed to delete user data, response code: ' +
-          err.code +
-          ', message: ' +
-          err.message,
+        err.code +
+        ', message: ' +
+        err.message,
       );
     }
   }

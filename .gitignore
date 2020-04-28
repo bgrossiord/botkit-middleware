@@ -26,6 +26,11 @@ build/Release
 # Dependency directory
 node_modules
 
+lib/package.json
+lib/package-lock.json
+lib/*.tgz
+lib/node-modules/
+
 # Mac
 *.DS_Store
 node_modules
